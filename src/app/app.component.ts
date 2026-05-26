@@ -2,7 +2,7 @@
 import { Component, OnInit, ViewEncapsulation, inject, ChangeDetectorRef } from '@angular/core';
 import { CommonModule, DatePipe } from '@angular/common';
 import { FormsModule } from '@angular/forms';
-import { HttpClientModule, HttpClient } from '@angular/common/http';
+import { HttpClientModule } from '@angular/common/http';
 import { ApiService } from './services/api.service';
 import {
   ControlType, DataSource, DataType, ValidationRule,
@@ -18,7 +18,6 @@ import { AnalyticsDashboardComponent } from './components/analytics-dashboard.co
 import { ReportBuilderComponent } from './components/report-builder.component';
 import { SpReportComponent } from './components/sp-report.component';
 import { ApiManagerComponent } from './components/api-manager.component';
-import { environment } from '../environments/environment';
 
 type AppView = 'forms' | 'datasources' | 'controltypes' | 'connections' | 'analytics' | 'reports' | 'sp-reports' | 'api-manager';
 type DesignerTab = 'design' | 'settings' | 'preview' | 'json' | 'records' | 'connector';
@@ -37,7 +36,6 @@ type PropsTab = 'general' | 'style' | 'validate' | 'layout';
 })
 export class AppComponent implements OnInit {
   private api = inject(ApiService);
-  private http = inject(HttpClient);
   private cdr = inject(ChangeDetectorRef);
 
   // App State
@@ -60,7 +58,7 @@ export class AppComponent implements OnInit {
   // Palette
   controlTypes: ControlType[] = [];
   paletteSearch = '';
-  controlCategories = ['Input', 'Display', 'Action', 'Layout'];
+  controlCategories: string[] = [];
   canvasDragOver = false;
   private draggingPaletteType?: ControlType;
 
@@ -82,6 +80,9 @@ export class AppComponent implements OnInit {
   // Modals
   createFormModal = false;
   newFormData: Partial<FormDefinition> = {};
+  cloneFormModal = false;
+  cloneFormName = '';
+  private cloningForm?: FormSummary;
 
   // Toast
   toastVisible = false;
@@ -128,10 +129,21 @@ export class AppComponent implements OnInit {
   onSearch() { this.loadForms(); }
 
   loadMasterData() {
-    this.api.getControlTypes().subscribe(ct => this.controlTypes = ct);
+    this.loadControlTypes();
     this.api.getDataTypes().subscribe(dt => this.dataTypes = dt);
     this.loadDataSources();
     this.api.getValidationRules().subscribe(vr => this.validationRules = vr);
+  }
+
+  private loadControlTypes() {
+    this.api.getControlTypes().subscribe(ct => {
+      this.controlTypes = ct;
+      const seen = new Set<string>();
+      this.controlCategories = ct
+        .map(c => c.category)
+        .filter(cat => cat && !seen.has(cat) && seen.add(cat))
+        .sort();
+    });
   }
 
   loadDataSources() {
@@ -162,6 +174,7 @@ export class AppComponent implements OnInit {
   }
 
   openDesigner(formId: number) {
+    this.loadControlTypes();
     this.api.getForm(formId).subscribe({
       next: form => {
         this.currentForm = form;
@@ -207,10 +220,20 @@ export class AppComponent implements OnInit {
   }
 
   cloneFormDialog(form: FormSummary) {
-    const name = prompt('New form name:', `${form.name} (Copy)`);
-    if (!name) return;
-    this.api.cloneForm(form.id, name).subscribe({
-      next: newId => { this.loadForms(); this.showToast('Form cloned!'); this.openDesigner(newId); },
+    this.cloningForm = form;
+    this.cloneFormName = `${form.name} (Copy)`;
+    this.cloneFormModal = true;
+  }
+
+  cloneForm() {
+    if (!this.cloneFormName.trim() || !this.cloningForm) return;
+    this.api.cloneForm(this.cloningForm.id, this.cloneFormName).subscribe({
+      next: newId => {
+        this.cloneFormModal = false;
+        this.loadForms();
+        this.showToast('Form cloned!');
+        this.openDesigner(newId);
+      },
       error: () => this.showToast('Clone failed', 'error')
     });
   }
@@ -356,21 +379,12 @@ export class AppComponent implements OnInit {
         ctrl.dataSourceItems = ds.items;
       } else {
         ctrl.dataSourceItems = [];
-        this.http.get<any>(`${environment.apiBase}/api/datasources/${ds.id}/items`).subscribe({
-          next: res => {
-            const rows = res.data || res || [];
-            if (Array.isArray(rows)) {
-              ctrl.dataSourceItems = rows.map((r: any) => ({
-                id: r.id ?? 0,
-                value: String(r.value ?? r.Value ?? ''),
-                label: String(r.label ?? r.Label ?? r.text ?? r.Text ?? ''),
-                sortOrder: r.sortOrder ?? 0,
-                isDefault: r.isDefault ?? false,
-                isActive: true
-              }));
-              this.cdr.detectChanges();
-            }
-          }
+        this.api.getDataSourceItems(ds.id).subscribe({
+          next: items => {
+            ctrl.dataSourceItems = items;
+            this.cdr.detectChanges();
+          },
+          error: () => this.showToast('Failed to load data source items', 'error')
         });
       }
     }

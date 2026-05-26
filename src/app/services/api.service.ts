@@ -4,7 +4,7 @@ import { HttpClient, HttpParams } from '@angular/common/http';
 import { Observable, map } from 'rxjs';
 import { environment } from '../../environments/environment';
 import {
-  ApiResponse, PagedResult, ControlType, DataType, DataSource,
+  ApiResponse, PagedResult, ControlType, DataType, DataSource, DataSourceItem,
   ValidationRule, FormDefinition, FormSummary, FormControl
 } from '../models/form-builder.models';
 
@@ -42,6 +42,10 @@ export class ApiService {
   }
   getDataSource(id: number): Observable<DataSource> {
     return this.http.get<ApiResponse<DataSource>>(`${this.base}/datasources/${id}`)
+      .pipe(map(r => r.data));
+  }
+  getDataSourceItems(id: number): Observable<DataSourceItem[]> {
+    return this.http.get<ApiResponse<DataSourceItem[]>>(`${this.base}/datasources/${id}/items`)
       .pipe(map(r => r.data));
   }
   createDataSource(data: Partial<DataSource>): Observable<DataSource> {
@@ -90,8 +94,11 @@ export class ApiService {
       .pipe(map(r => r.data));
   }
   cloneForm(formId: number, newName: string): Observable<number> {
-    return this.http.post<ApiResponse<number>>(`${this.base}/forms/${formId}/clone`, newName)
-      .pipe(map(r => r.data));
+    return this.http.post<ApiResponse<number>>(
+      `${this.base}/forms/${formId}/clone`,
+      JSON.stringify(newName),
+      { headers: { 'Content-Type': 'application/json' } }
+    ).pipe(map(r => r.data));
   }
   submitForm(formId: number, data: object): Observable<string> {
     return this.http.post<ApiResponse<string>>(`${this.base}/forms/${formId}/submit`, data)

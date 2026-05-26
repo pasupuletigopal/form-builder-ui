@@ -132,16 +132,18 @@
                     <div class="palette__search">
                         <input type="text" placeholder="Search controls…" [(ngModel)]="paletteSearch" class="palette-input" />
                     </div>
-                    <div class="palette__group" *ngFor="let cat of controlCategories">
-                        <div class="palette__group-label">{{ cat }}</div>
-                        <div class="palette__items">
-                            <div class="palette__item"
-                                 *ngFor="let ct of getControlsByCategory(cat)"
-                                 draggable="true"
-                                 (dragstart)="onPaletteDragStart($event, ct)"
-                                 (click)="addControlFromPalette(ct)">
-                                <span class="palette__item-icon">{{ getControlIcon(ct.name) }}</span>
-                                <span class="palette__item-name">{{ ct.displayName }}</span>
+                    <div class="palette__scroll">
+                        <div class="palette__group" *ngFor="let cat of controlCategories">
+                            <div class="palette__group-label">{{ cat }}</div>
+                            <div class="palette__items">
+                                <div class="palette__item"
+                                     *ngFor="let ct of getControlsByCategory(cat)"
+                                     draggable="true"
+                                     (dragstart)="onPaletteDragStart($event, ct)"
+                                     (click)="addControlFromPalette(ct)">
+                                    <span class="palette__item-icon">{{ getControlIcon(ct.name) }}</span>
+                                    <span class="palette__item-name">{{ ct.displayName }}</span>
+                                </div>
                             </div>
                         </div>
                     </div>
@@ -681,6 +683,26 @@
             <div class="modal-footer">
                 <button class="btn-outline" (click)="createFormModal=false">Cancel</button>
                 <button class="btn-primary" (click)="createForm()">Create & Design</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- ====== CLONE FORM MODAL ====== -->
+    <div class="modal-overlay" *ngIf="cloneFormModal" (click)="cloneFormModal=false">
+        <div class="modal" (click)="$event.stopPropagation()">
+            <div class="modal-header">
+                <h3>Clone Form</h3>
+                <button (click)="cloneFormModal=false">✕</button>
+            </div>
+            <div class="modal-body">
+                <div class="prop-group">
+                    <label>New Form Name *</label>
+                    <input type="text" [(ngModel)]="cloneFormName" placeholder="My Form (Copy)" />
+                </div>
+            </div>
+            <div class="modal-footer">
+                <button class="btn-outline" (click)="cloneFormModal=false">Cancel</button>
+                <button class="btn-primary" (click)="cloneForm()">Clone Form</button>
             </div>
         </div>
     </div>
