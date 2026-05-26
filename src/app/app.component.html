@@ -1,0 +1,693 @@
+<!-- src/app/app.component.html -->
+<div class="fb-shell" [class.dark]="isDark">
+
+    <!-- TOP BAR -->
+    <header class="fb-topbar">
+        <div class="fb-topbar__brand">
+            <span class="fb-topbar__logo">⬡</span>
+            <span class="fb-topbar__title">FormForge</span>
+            <span class="fb-topbar__sub">Dynamic Form Builder</span>
+        </div>
+        <nav class="fb-topbar__nav">
+            <button class="nav-btn" [class.active]="activeView==='forms'" (click)="setView('forms')">
+                <span class="nav-icon">⊞</span> Forms
+            </button>
+            <button class="nav-btn" [class.active]="activeView==='datasources'" (click)="setView('datasources')">
+                <span class="nav-icon">⊟</span> Data Sources
+            </button>
+            <button class="nav-btn" [class.active]="activeView==='connections'"
+                    (click)="setView('connections')">
+                <span class="nav-icon">⊡</span> Connections
+            </button>
+            <button class="nav-btn" [class.active]="activeView==='analytics'"
+                    (click)="setView('analytics')">
+                <span class="nav-icon">⊞</span> Analytics
+            </button>
+            <button class="nav-btn" [class.active]="activeView==='controltypes'" (click)="setView('controltypes')">
+                <span class="nav-icon">⊞</span> Control Types
+            </button>
+            <button class="nav-btn" [class.active]="activeView==='reports'"
+                    (click)="setView('reports')">
+                <span class="nav-icon">⊟</span> Reports
+            </button>
+            <button class="nav-btn" [class.active]="activeView==='sp-reports'"
+                    (click)="setView('sp-reports')">
+                <span class="nav-icon">⚙</span> SP &amp; Views
+            </button>
+            <button class="nav-btn" [class.active]="activeView==='api-manager'"
+                    (click)="setView('api-manager')">
+                <span class="nav-icon">⊡</span> API Manager
+            </button>
+        </nav>
+        <div class="fb-topbar__actions">
+            <button class="icon-btn" (click)="toggleDark()" [title]="isDark ? 'Light mode' : 'Dark mode'">
+                {{ isDark ? '☀' : '☾' }}
+            </button>
+        </div>
+    </header>
+
+    <!-- MAIN CONTENT -->
+    <main class="fb-main">
+
+        <!-- ====== FORMS LIST VIEW ====== -->
+        <div class="fb-view" *ngIf="activeView==='forms' && !designerOpen">
+            <div class="fb-view__header">
+                <div>
+                    <h1 class="fb-view__title">Forms</h1>
+                    <p class="fb-view__desc">Build, design, and manage records for your dynamic forms</p>
+                </div>
+                <div class="fb-view__actions">
+                    <div class="search-box">
+                        <input type="text" placeholder="Search forms..." [(ngModel)]="searchTerm"
+                               (input)="onSearch()" class="search-input" />
+                    </div>
+                    <button class="btn-primary" (click)="openCreateForm()">+ New Form</button>
+                </div>
+            </div>
+            <div class="fb-cards" *ngIf="!loading">
+                <div class="fb-card" *ngFor="let form of forms">
+                    <div class="fb-card__badge">v{{ form.version }}</div>
+                    <div class="fb-card__icon">⊞</div>
+                    <h3 class="fb-card__title">{{ form.name }}</h3>
+                    <p class="fb-card__desc">{{ form.description || 'No description' }}</p>
+                    <div class="fb-card__meta">
+                        <span class="meta-chip">{{ form.controlCount }} controls</span>
+                        <span class="meta-chip" [class.active]="form.isActive">{{ form.isActive ? 'Active' : 'Inactive' }}</span>
+                    </div>
+                    <div class="fb-card__footer">
+                        <span class="fb-card__date">{{ form.updatedAt | date:'dd MMM yyyy' }}</span>
+                        <div class="fb-card__btns">
+                            <button class="card-btn" (click)="openDesigner(form.id)" title="Design">✏ Design</button>
+                            <button class="card-btn card-btn--primary" (click)="openRecords(form.id)" title="View Records">⊞ Records</button>
+                            <button class="card-btn" (click)="cloneFormDialog(form)" title="Clone">⊕</button>
+                            <button class="card-btn danger" (click)="deleteForm(form)" title="Delete">⊗</button>
+                        </div>
+                    </div>
+                </div>
+                <div class="fb-card fb-card--new" (click)="openCreateForm()">
+                    <div class="fb-card__plus">+</div>
+                    <p>Create New Form</p>
+                </div>
+            </div>
+            <div class="loading-state" *ngIf="loading">
+                <div class="spinner"></div>
+                <p>Loading forms…</p>
+            </div>
+            <div class="empty-state" *ngIf="!loading && forms.length === 0">
+                <div class="empty-icon">⊞</div>
+                <h3>No forms yet</h3>
+                <p>Create your first dynamic form to get started</p>
+                <button class="btn-primary" (click)="openCreateForm()">+ Create Form</button>
+            </div>
+        </div>
+
+        <!-- ====== FORM DESIGNER VIEW ====== -->
+        <div class="fb-designer" *ngIf="designerOpen && currentForm">
+
+            <!-- Designer Top Bar -->
+            <div class="designer-bar">
+                <button class="back-btn" (click)="closeDesigner()">← Forms</button>
+                <div class="designer-bar__info">
+                    <h2>{{ currentForm.name }}</h2>
+                    <span class="version-badge">v{{ currentForm.version }}</span>
+                </div>
+                <div class="designer-bar__tabs">
+                    <button [class.tab-active]="designerTab==='design'" (click)="designerTab='design'">Design</button>
+                    <button [class.tab-active]="designerTab==='settings'" (click)="designerTab='settings'">Settings</button>
+                    <button [class.tab-active]="designerTab==='preview'" (click)="designerTab='preview'">Preview</button>
+                    <button [class.tab-active]="designerTab==='records'" (click)="designerTab='records'" class="tab-records">⊞ Records</button>
+                    <button [class.tab-active]="designerTab==='json'" (click)="designerTab='json'">JSON</button>
+                    <button [class.tab-active]="designerTab==='connector'" (click)="designerTab='connector'" class="tab-connector">⊡ Connector</button>
+                </div>
+                <div class="designer-bar__actions">
+                    <button class="btn-outline" *ngIf="designerTab !== 'records'" (click)="designerTab='preview'">Preview</button>
+                    <button class="btn-primary" *ngIf="designerTab !== 'records'" (click)="saveForm()">💾 Save</button>
+                </div>
+            </div>
+
+            <!-- ---- DESIGN TAB ---- -->
+            <div class="designer-workspace" *ngIf="designerTab==='design'">
+                <!-- LEFT: Palette -->
+                <aside class="palette">
+                    <div class="palette__search">
+                        <input type="text" placeholder="Search controls…" [(ngModel)]="paletteSearch" class="palette-input" />
+                    </div>
+                    <div class="palette__group" *ngFor="let cat of controlCategories">
+                        <div class="palette__group-label">{{ cat }}</div>
+                        <div class="palette__items">
+                            <div class="palette__item"
+                                 *ngFor="let ct of getControlsByCategory(cat)"
+                                 draggable="true"
+                                 (dragstart)="onPaletteDragStart($event, ct)"
+                                 (click)="addControlFromPalette(ct)">
+                                <span class="palette__item-icon">{{ getControlIcon(ct.name) }}</span>
+                                <span class="palette__item-name">{{ ct.displayName }}</span>
+                            </div>
+                        </div>
+                    </div>
+                </aside>
+
+                <!-- CENTER: Canvas -->
+                <div class="canvas-area"
+                     (dragover)="onCanvasDragOver($event)"
+                     (drop)="onCanvasDrop($event)"
+                     (dragenter)="canvasDragOver=true"
+                     (dragleave)="canvasDragOver=false"
+                     [class.drag-over]="canvasDragOver">
+
+                    <div class="canvas-hint" *ngIf="currentForm.controls.length === 0">
+                        <div class="canvas-hint__icon">⊞</div>
+                        <p>Drag controls from the palette or click to add</p>
+                    </div>
+
+                    <div class="canvas-grid">
+                        <div class="canvas-row" *ngFor="let row of getRows()">
+                            <div class="canvas-cell"
+                                 *ngFor="let control of row"
+                                 [style.grid-column]="'span ' + control.colSpan"
+                                 [class.selected]="selectedControlId === control.id"
+                                 (click)="selectControl(control)">
+                                <div class="control-wrapper">
+                                    <div class="control-toolbar">
+                                        <span class="control-type-label">{{ control.controlTypeDisplayName }}</span>
+                                        <div class="control-toolbar-btns">
+                                            <button (click)="moveControl(control, -1); $event.stopPropagation()">↑</button>
+                                            <button (click)="moveControl(control, 1); $event.stopPropagation()">↓</button>
+                                            <button (click)="duplicateControl(control); $event.stopPropagation()">⊕</button>
+                                            <button class="danger" (click)="removeControl(control); $event.stopPropagation()">⊗</button>
+                                        </div>
+                                    </div>
+                                    <app-control-preview [control]="control"
+                                                         [isSelected]="selectedControlId === control.id">
+                                    </app-control-preview>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- RIGHT: Properties Panel -->
+                <aside class="props-panel" *ngIf="selectedControl">
+                    <div class="props-panel__header">
+                        <span>{{ selectedControl.controlTypeDisplayName }}</span>
+                        <span class="props-panel__field">{{ selectedControl.fieldName }}</span>
+                    </div>
+                    <div class="props-tabs">
+                        <button [class.active]="propsTab==='general'" (click)="propsTab='general'">General</button>
+                        <button [class.active]="propsTab==='style'" (click)="propsTab='style'">Style</button>
+                        <button [class.active]="propsTab==='validate'" (click)="propsTab='validate'">Validate</button>
+                        <button [class.active]="propsTab==='layout'" (click)="propsTab='layout'">Layout</button>
+                    </div>
+
+                    <!-- GENERAL TAB -->
+                    <div class="props-content" *ngIf="propsTab==='general'">
+                        <div class="prop-group"><label>Field Name *</label><input type="text" [(ngModel)]="selectedControl.fieldName" (change)="markDirty()" /></div>
+                        <div class="prop-group"><label>Label</label><input type="text" [(ngModel)]="selectedControl.label" (change)="markDirty()" /></div>
+                        <div class="prop-group"><label>Placeholder</label><input type="text" [(ngModel)]="selectedControl.placeholder" (change)="markDirty()" /></div>
+                        <div class="prop-group"><label>Helper Text</label><input type="text" [(ngModel)]="selectedControl.helperText" (change)="markDirty()" /></div>
+                        <div class="prop-group"><label>Tooltip</label><input type="text" [(ngModel)]="selectedControl.tooltip" (change)="markDirty()" /></div>
+                        <div class="prop-group"><label>Default Value</label><input type="text" [(ngModel)]="selectedControl.defaultValue" (change)="markDirty()" /></div>
+                        <div class="prop-group" *ngIf="hasDataSource(selectedControl.controlTypeName)">
+                            <label>Data Type</label>
+                            <select [(ngModel)]="selectedControl.dataTypeId" (change)="markDirty()">
+                                <option [ngValue]="undefined">-- Select --</option>
+                                <option *ngFor="let dt of dataTypes" [ngValue]="dt.id">{{ dt.displayName }}</option>
+                            </select>
+                        </div>
+                        <div class="prop-group" *ngIf="hasDataSource(selectedControl.controlTypeName)">
+                            <label>Data Source</label>
+                            <select [(ngModel)]="selectedControl.dataSourceId" (change)="onDataSourceChange()">
+                                <option [ngValue]="undefined">-- None --</option>
+                                <option *ngFor="let ds of dataSources" [ngValue]="ds.id">{{ ds.name }}</option>
+                            </select>
+                        </div>
+                        <div class="prop-group" *ngIf="selectedControl.controlTypeName === 'MultiTextBox'">
+                            <label>Rows</label>
+                            <input type="number" [(ngModel)]="selectedControl.rows" min="2" max="20" (change)="markDirty()" />
+                        </div>
+                        <ng-container *ngIf="selectedControl.controlTypeName === 'Button'">
+                            <div class="prop-group">
+                                <label>Button Type</label>
+                                <select [(ngModel)]="selectedControl.buttonType" (change)="markDirty()">
+                                    <option value="button">Button</option>
+                                    <option value="submit">Submit</option>
+                                    <option value="reset">Reset</option>
+                                </select>
+                            </div>
+                            <div class="prop-group">
+                                <label>Button Variant</label>
+                                <select [(ngModel)]="selectedControl.buttonVariant" (change)="markDirty()">
+                                    <option value="contained">Contained</option>
+                                    <option value="outlined">Outlined</option>
+                                    <option value="text">Text</option>
+                                </select>
+                            </div>
+                        </ng-container>
+                    </div>
+
+                    <!-- STYLE TAB -->
+                    <div class="props-content" *ngIf="propsTab==='style'">
+                        <div class="prop-section-label">Colors</div>
+                        <div class="prop-row">
+                            <div class="prop-group half">
+                                <label>Label Color</label>
+                                <div class="color-row">
+                                    <input type="color" [(ngModel)]="selectedControl.labelColor" (change)="markDirty()" />
+                                    <input type="text" [(ngModel)]="selectedControl.labelColor" (change)="markDirty()" placeholder="#000000" />
+                                </div>
+                            </div>
+                            <div class="prop-group half">
+                                <label>Text Color</label>
+                                <div class="color-row">
+                                    <input type="color" [(ngModel)]="selectedControl.textColor" (change)="markDirty()" />
+                                    <input type="text" [(ngModel)]="selectedControl.textColor" (change)="markDirty()" placeholder="#000000" />
+                                </div>
+                            </div>
+                        </div>
+                        <div class="prop-row">
+                            <div class="prop-group half">
+                                <label>Control Color</label>
+                                <div class="color-row">
+                                    <input type="color" [(ngModel)]="selectedControl.controlColor" (change)="markDirty()" />
+                                    <input type="text" [(ngModel)]="selectedControl.controlColor" (change)="markDirty()" placeholder="#1976D2" />
+                                </div>
+                            </div>
+                            <div class="prop-group half">
+                                <label>Background</label>
+                                <div class="color-row">
+                                    <input type="color" [(ngModel)]="selectedControl.backgroundColor" (change)="markDirty()" />
+                                    <input type="text" [(ngModel)]="selectedControl.backgroundColor" (change)="markDirty()" placeholder="#FFFFFF" />
+                                </div>
+                            </div>
+                        </div>
+                        <div class="prop-row">
+                            <div class="prop-group half">
+                                <label>Border Color</label>
+                                <div class="color-row">
+                                    <input type="color" [(ngModel)]="selectedControl.borderColor" (change)="markDirty()" />
+                                    <input type="text" [(ngModel)]="selectedControl.borderColor" (change)="markDirty()" placeholder="#CCCCCC" />
+                                </div>
+                            </div>
+                            <div class="prop-group half">
+                                <label>Border Width</label>
+                                <input type="number" [(ngModel)]="selectedControl.borderWidth" min="0" max="10" (change)="markDirty()" />
+                            </div>
+                        </div>
+
+                        <div class="prop-section-label">Typography</div>
+                        <div class="prop-group">
+                            <label>Font Family</label>
+                            <select [(ngModel)]="selectedControl.fontFamily" (change)="markDirty()">
+                                <option value="">-- Inherit --</option>
+                                <option *ngFor="let f of fontFamilies" [value]="f">{{ f }}</option>
+                            </select>
+                        </div>
+                        <div class="prop-row">
+                            <div class="prop-group half">
+                                <label>Font Size (px)</label>
+                                <input type="number" [(ngModel)]="selectedControl.fontSize" min="8" max="72" (change)="markDirty()" />
+                            </div>
+                            <div class="prop-group half">
+                                <label>Font Weight</label>
+                                <select [(ngModel)]="selectedControl.fontWeight" (change)="markDirty()">
+                                    <option value="normal">Normal</option>
+                                    <option value="bold">Bold</option>
+                                    <option value="300">Light (300)</option>
+                                    <option value="500">Medium (500)</option>
+                                    <option value="700">Bold (700)</option>
+                                    <option value="900">Black (900)</option>
+                                </select>
+                            </div>
+                        </div>
+                        <div class="prop-group">
+                            <label>Font Style</label>
+                            <select [(ngModel)]="selectedControl.fontStyle" (change)="markDirty()">
+                                <option value="normal">Normal</option>
+                                <option value="italic">Italic</option>
+                                <option value="oblique">Oblique</option>
+                            </select>
+                        </div>
+
+                        <div class="prop-section-label">Borders & Spacing</div>
+                        <div class="prop-group">
+                            <label>Border Radius (px)</label>
+                            <input type="number" [(ngModel)]="selectedControl.borderRadius" min="0" max="50" (change)="markDirty()" />
+                        </div>
+                        <div class="prop-group">
+                            <label>Padding (CSS: 8px 12px)</label>
+                            <input type="text" [(ngModel)]="selectedControl.padding" placeholder="8px 12px" (change)="markDirty()" />
+                        </div>
+                        <div class="prop-group">
+                            <label>Margin</label>
+                            <input type="text" [(ngModel)]="selectedControl.margin" placeholder="0 0 16px 0" (change)="markDirty()" />
+                        </div>
+                        <div class="prop-group">
+                            <label>CSS Class</label>
+                            <input type="text" [(ngModel)]="selectedControl.customCssClass" (change)="markDirty()" />
+                        </div>
+                        <div class="prop-group">
+                            <label>Custom CSS</label>
+                            <textarea rows="4" [(ngModel)]="selectedControl.customCss" (change)="markDirty()" placeholder="color: red; border: 2px solid blue;"></textarea>
+                        </div>
+                    </div>
+
+                    <!-- VALIDATE TAB -->
+                    <div class="props-content" *ngIf="propsTab==='validate'">
+                        <div class="toggle-row">
+                            <label>Required</label>
+                            <label class="toggle">
+                                <input type="checkbox" [(ngModel)]="selectedControl.isRequired" (change)="markDirty()" />
+                                <span class="toggle-track"></span>
+                            </label>
+                        </div>
+                        <div class="toggle-row">
+                            <label>Read Only</label>
+                            <label class="toggle">
+                                <input type="checkbox" [(ngModel)]="selectedControl.isReadOnly" (change)="markDirty()" />
+                                <span class="toggle-track"></span>
+                            </label>
+                        </div>
+                        <div class="toggle-row">
+                            <label>Disabled</label>
+                            <label class="toggle">
+                                <input type="checkbox" [(ngModel)]="selectedControl.isDisabled" (change)="markDirty()" />
+                                <span class="toggle-track"></span>
+                            </label>
+                        </div>
+                        <div class="toggle-row">
+                            <label>Hidden</label>
+                            <label class="toggle">
+                                <input type="checkbox" [(ngModel)]="selectedControl.isHidden" (change)="markDirty()" />
+                                <span class="toggle-track"></span>
+                            </label>
+                        </div>
+                        <div class="prop-row">
+                            <div class="prop-group half">
+                                <label>Min Length</label>
+                                <input type="number" [(ngModel)]="selectedControl.minLength" min="0" (change)="markDirty()" />
+                            </div>
+                            <div class="prop-group half">
+                                <label>Max Length</label>
+                                <input type="number" [(ngModel)]="selectedControl.maxLength" min="0" (change)="markDirty()" />
+                            </div>
+                        </div>
+                        <div class="prop-row">
+                            <div class="prop-group half">
+                                <label>Min Value</label>
+                                <input type="text" [(ngModel)]="selectedControl.minValue" (change)="markDirty()" />
+                            </div>
+                            <div class="prop-group half">
+                                <label>Max Value</label>
+                                <input type="text" [(ngModel)]="selectedControl.maxValue" (change)="markDirty()" />
+                            </div>
+                        </div>
+                        <div class="prop-group">
+                            <label>Regex Pattern</label>
+                            <input type="text" [(ngModel)]="selectedControl.pattern" (change)="markDirty()" placeholder="^[a-zA-Z]+$" />
+                        </div>
+                    </div>
+
+                    <!-- LAYOUT TAB -->
+                    <div class="props-content" *ngIf="propsTab==='layout'">
+                        <div class="prop-row">
+                            <div class="prop-group half">
+                                <label>Row</label>
+                                <input type="number" [(ngModel)]="selectedControl.rowIndex" min="0" (change)="markDirty()" />
+                            </div>
+                            <div class="prop-group half">
+                                <label>Column</label>
+                                <input type="number" [(ngModel)]="selectedControl.colIndex" min="0" max="11" (change)="markDirty()" />
+                            </div>
+                        </div>
+                        <div class="prop-group">
+                            <label>Column Span (1–12)</label>
+                            <div class="col-span-picker">
+                                <button *ngFor="let n of colSpanOptions"
+                                        [class.picked]="selectedControl.colSpan === n"
+                                        (click)="selectedControl.colSpan = n; markDirty()">
+                                    {{ n }}
+                                </button>
+                            </div>
+                        </div>
+                        <div class="prop-row">
+                            <div class="prop-group half">
+                                <label>Width</label>
+                                <input type="text" [(ngModel)]="selectedControl.width" placeholder="100%" (change)="markDirty()" />
+                            </div>
+                            <div class="prop-group half">
+                                <label>Height</label>
+                                <input type="text" [(ngModel)]="selectedControl.height" placeholder="auto" (change)="markDirty()" />
+                            </div>
+                        </div>
+                        <div class="prop-group">
+                            <label>Sort Order</label>
+                            <input type="number" [(ngModel)]="selectedControl.sortOrder" min="0" (change)="markDirty()" />
+                        </div>
+                    </div>
+                </aside>
+
+                <!-- No selection state -->
+                <aside class="props-panel props-panel--empty" *ngIf="!selectedControl">
+                    <div class="no-selection">
+                        <div class="no-selection__icon">⊡</div>
+                        <p>Click a control to edit its properties</p>
+                    </div>
+                </aside>
+            </div>
+
+            <!-- ---- SETTINGS TAB ---- -->
+            <div class="settings-view" *ngIf="designerTab==='settings'">
+                <div class="settings-card">
+                    <h3>Form Properties</h3>
+                    <div class="prop-group"><label>Form Name</label><input type="text" [(ngModel)]="currentForm.name" /></div>
+                    <div class="prop-group"><label>Title</label><input type="text" [(ngModel)]="currentForm.title" /></div>
+                    <div class="prop-group"><label>Description</label><textarea rows="3" [(ngModel)]="currentForm.description"></textarea></div>
+                    <div class="prop-group"><label>Submit URL</label><input type="text" [(ngModel)]="currentForm.submitUrl" /></div>
+                    <div class="prop-group">
+                        <label>Submit Method</label>
+                        <select [(ngModel)]="currentForm.submitMethod">
+                            <option>POST</option>
+                            <option>PUT</option>
+                            <option>PATCH</option>
+                        </select>
+                    </div>
+                </div>
+                <div class="settings-card">
+                    <h3>Form Appearance</h3>
+                    <div class="prop-row">
+                        <div class="prop-group half">
+                            <label>Background Color</label>
+                            <div class="color-row">
+                                <input type="color" [(ngModel)]="currentForm.backgroundColor" />
+                                <input type="text" [(ngModel)]="currentForm.backgroundColor" />
+                            </div>
+                        </div>
+                        <div class="prop-group half">
+                            <label>Primary Color</label>
+                            <div class="color-row">
+                                <input type="color" [(ngModel)]="currentForm.primaryColor" />
+                                <input type="text" [(ngModel)]="currentForm.primaryColor" />
+                            </div>
+                        </div>
+                    </div>
+                    <div class="prop-group">
+                        <label>Font Family</label>
+                        <select [(ngModel)]="currentForm.fontFamily">
+                            <option *ngFor="let f of fontFamilies" [value]="f">{{ f }}</option>
+                        </select>
+                    </div>
+                    <div class="prop-row">
+                        <div class="prop-group half"><label>Font Size (px)</label><input type="number" [(ngModel)]="currentForm.fontSize" min="10" max="24" /></div>
+                        <div class="prop-group half"><label>Border Radius (px)</label><input type="number" [(ngModel)]="currentForm.borderRadius" min="0" max="32" /></div>
+                    </div>
+                    <div class="prop-row">
+                        <div class="prop-group half"><label>Padding (px)</label><input type="number" [(ngModel)]="currentForm.padding" min="0" max="80" /></div>
+                        <div class="prop-group half"><label>Max Width (px)</label><input type="number" [(ngModel)]="currentForm.maxWidth" min="400" max="1600" /></div>
+                    </div>
+                    <button class="btn-primary" (click)="saveForm()">Apply Settings</button>
+                </div>
+            </div>
+
+            <!-- ---- PREVIEW TAB ---- -->
+            <div class="preview-view" *ngIf="designerTab==='preview'">
+                <div class="preview-toolbar">
+                    <span>Form Preview</span>
+                    <div class="preview-device-btns">
+                        <button [class.active]="previewDevice==='desktop'" (click)="previewDevice='desktop'">⊞ Desktop</button>
+                        <button [class.active]="previewDevice==='tablet'" (click)="previewDevice='tablet'">⊟ Tablet</button>
+                        <button [class.active]="previewDevice==='mobile'" (click)="previewDevice='mobile'">☰ Mobile</button>
+                    </div>
+                </div>
+                <div class="preview-frame-wrap" [class]="'device-' + previewDevice">
+                    <div class="preview-frame"
+                         [style.background-color]="currentForm.backgroundColor"
+                         [style.font-family]="currentForm.fontFamily"
+                         [style.font-size.px]="currentForm.fontSize"
+                         [style.border-radius.px]="currentForm.borderRadius"
+                         [style.padding.px]="currentForm.padding"
+                         [style.max-width.px]="currentForm.maxWidth">
+                        <h2 class="preview-form-title" *ngIf="currentForm.title" [style.color]="currentForm.primaryColor">
+                            {{ currentForm.title }}
+                        </h2>
+                        <div class="preview-grid">
+                            <div class="preview-row" *ngFor="let row of getRows()">
+                                <div class="preview-col"
+                                     *ngFor="let control of row"
+                                     [style.grid-column]="'span ' + control.colSpan">
+                                    <app-control-preview [control]="control" [isPreview]="true"></app-control-preview>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- ---- RECORDS TAB (CRUD) ---- -->
+            <div class="records-view" *ngIf="designerTab==='records'">
+                <app-form-renderer [form]="currentForm"
+                                   (goBack)="designerTab='design'">
+                </app-form-renderer>
+            </div>
+
+            <!-- ---- JSON TAB ---- -->
+            <div class="json-view" *ngIf="designerTab==='json'">
+                <div class="json-toolbar">
+                    <span>Form JSON Definition</span>
+                    <button (click)="copyJson()">Copy JSON</button>
+                </div>
+                <pre class="json-output">{{ getFormJson() }}</pre>
+            </div>
+
+            <!-- ---- Connector TAB ---- -->
+            <div class="connector-view" *ngIf="designerTab==='connector'">
+                <app-connector-settings [form]="currentForm"
+                                        (saved)="onConnectorSaved()">
+                </app-connector-settings>
+            </div>
+
+        </div>
+
+        <!-- ====== DATA SOURCES VIEW ====== -->
+        <div class="fb-view" *ngIf="activeView==='datasources'">
+            <div class="fb-view__header">
+                <div>
+                    <h1 class="fb-view__title">Data Sources</h1>
+                    <p class="fb-view__desc">Manage dropdown and radio button options</p>
+                </div>
+                <button class="btn-primary" (click)="openDataSourceDialog()">+ New Data Source</button>
+            </div>
+
+            <div class="empty-state" *ngIf="dataSources.length === 0">
+                <div class="empty-icon">⊟</div>
+                <h3>No data sources yet</h3>
+                <p>Create your first data source to use in dropdowns and radio buttons</p>
+                <button class="btn-primary" (click)="openDataSourceDialog()">+ New Data Source</button>
+            </div>
+
+            <div class="ds-list" *ngIf="dataSources.length > 0">
+                <div class="ds-item" *ngFor="let ds of dataSources">
+                    <div class="ds-item__header">
+                        <h3>{{ ds.name }}</h3>
+                        <span class="badge-type">{{ ds.sourceType }}</span>
+                    </div>
+                    <p class="ds-item__desc">{{ ds.description || 'No description' }}</p>
+                    <div class="ds-item__chips">
+                        <span class="meta-chip" *ngFor="let item of ds.items.slice(0, 5)">{{ item.label }}</span>
+                        <span class="meta-chip" *ngIf="ds.items.length > 5">+{{ ds.items.length - 5 }} more</span>
+                    </div>
+                    <div class="ds-item__stats">
+                        <span>{{ ds.items.length }} items</span>
+                        <span>Value: <code>{{ ds.valueField }}</code></span>
+                        <span>Label: <code>{{ ds.labelField }}</code></span>
+                    </div>
+                    <div class="ds-item__footer">
+                        <button class="card-btn" (click)="editDataSource(ds)">✏ Edit</button>
+                        <button class="card-btn danger" (click)="deleteDataSource(ds)">⊗ Delete</button>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- ====== CONTROL TYPES VIEW ====== -->
+        <div class="fb-view" *ngIf="activeView==='controltypes'">
+            <div class="fb-view__header">
+                <div>
+                    <h1 class="fb-view__title">Control Types</h1>
+                    <p class="fb-view__desc">Extend by inserting into the ControlTypes table</p>
+                </div>
+            </div>
+            <table class="data-table">
+                <thead>
+                    <tr><th>Name</th><th>Display Name</th><th>Category</th><th>Icon</th><th>Order</th><th>Status</th><th>Actions</th></tr>
+                </thead>
+                <tbody>
+                    <tr *ngFor="let ct of controlTypes">
+                        <td><code>{{ ct.name }}</code></td>
+                        <td>{{ ct.displayName }}</td>
+                        <td><span class="badge-cat">{{ ct.category }}</span></td>
+                        <td>{{ getControlIcon(ct.name) }}</td>
+                        <td>{{ ct.sortOrder }}</td>
+                        <td><span class="status-dot" [class.active]="ct.isActive"></span></td>
+                        <td>
+                            <button class="card-btn danger" (click)="deleteControlType(ct)">Delete</button>
+                        </td>
+                    </tr>
+                </tbody>
+            </table>
+        </div>
+
+        <div class="fb-view" *ngIf="activeView==='connections'">
+            <app-connection-manager></app-connection-manager>
+        </div>
+
+        <div class="fb-view analytics-view" *ngIf="activeView==='analytics'">
+            <app-analytics-dashboard></app-analytics-dashboard>
+        </div>
+
+        <div class="fb-view reports-view" *ngIf="activeView==='reports'">
+            <app-report-builder></app-report-builder>
+        </div>
+
+        <div class="fb-view sp-reports-view" *ngIf="activeView==='sp-reports'">
+            <app-sp-report></app-sp-report>
+        </div>
+
+        <div class="fb-view api-manager-view" *ngIf="activeView==='api-manager'">
+            <app-api-manager></app-api-manager>
+        </div>
+
+    </main>
+
+    <!-- ====== DATA SOURCE EDITOR MODAL ====== -->
+    <app-data-source-editor
+        *ngIf="showDataSourceEditor"
+        [dataSource]="editingDataSource"
+        (saved)="onDataSourceSaved($event)"
+        (closed)="onDataSourceEditorClosed()">
+    </app-data-source-editor>
+
+    <!-- ====== CREATE FORM MODAL ====== -->
+    <div class="modal-overlay" *ngIf="createFormModal" (click)="createFormModal=false">
+        <div class="modal" (click)="$event.stopPropagation()">
+            <div class="modal-header">
+                <h3>Create New Form</h3>
+                <button (click)="createFormModal=false">✕</button>
+            </div>
+            <div class="modal-body">
+                <div class="prop-group"><label>Form Name *</label><input type="text" [(ngModel)]="newFormData.name" placeholder="My Form" /></div>
+                <div class="prop-group"><label>Title</label><input type="text" [(ngModel)]="newFormData.title" placeholder="Displayed form title" /></div>
+                <div class="prop-group"><label>Description</label><textarea rows="3" [(ngModel)]="newFormData.description" placeholder="What is this form for?"></textarea></div>
+            </div>
+            <div class="modal-footer">
+                <button class="btn-outline" (click)="createFormModal=false">Cancel</button>
+                <button class="btn-primary" (click)="createForm()">Create & Design</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Toast notification -->
+    <div class="toast" [class.show]="toastVisible" [class.error]="toastType==='error'">
+        {{ toastMessage }}
+    </div>
+
+</div>
