@@ -328,6 +328,8 @@ interface ColumnFilterDto {
           </div>
         </div>
       </div>
+    </div>
+  </div>
 
   <!-- ====== CREATE DASHBOARD MODAL ====== -->
   <div class="ad-overlay" *ngIf="showDashboardModal"
@@ -506,8 +508,8 @@ interface ColumnFilterDto {
           </div>
         </ng-container>
 
-        <!-- Bar / Line / Area / HorizontalBar / StackedBar config -->
-        <ng-container *ngIf="wForm.type === 'Bar' || wForm.type === 'Line' || wForm.type === 'Area' || wForm.type === 'HorizontalBar' || wForm.type === 'StackedBar'">
+        <!-- Bar / Line / Area / HorizontalBar / StackedBar / Pie / Donut config -->
+        <ng-container *ngIf="wForm.type === 'Bar' || wForm.type === 'Line' || wForm.type === 'Area' || wForm.type === 'HorizontalBar' || wForm.type === 'StackedBar' || wForm.type === 'Pie' || wForm.type === 'Donut'">
 
           <!-- Data source toggle -->
           <div class="ad-field">
