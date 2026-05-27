@@ -774,9 +774,10 @@ export class FormRendererComponent implements OnInit, OnChanges {
     this.currentRecord = rec;
     this.mode = 'view';
     this.buildForm();
-    const parsed = rec._parsed ?? JSON.parse(rec.recordData || '{}');
-    this.dynamicForm.patchValue(this.coerceValuesForForm(parsed));
+    const raw = rec._parsed ?? JSON.parse(rec.recordData || '{}');
+    this.dynamicForm.patchValue(this.coerceValuesForForm(this.mapExternalToFormFields(raw)));
     this.dynamicForm.disable();
+    this.cdr.detectChanges();
   }
 
   editRecord(rec: any) {
@@ -785,8 +786,9 @@ export class FormRendererComponent implements OnInit, OnChanges {
     this.submitError = '';
     this.submitSuccess = '';
     this.buildForm();
-    const parsed = rec._parsed ?? JSON.parse(rec.recordData || '{}');
-    this.dynamicForm.patchValue(this.coerceValuesForForm(parsed));
+    const raw = rec._parsed ?? JSON.parse(rec.recordData || '{}');
+    this.dynamicForm.patchValue(this.coerceValuesForForm(this.mapExternalToFormFields(raw)));
+    this.cdr.detectChanges();
   }
 
   submitForm() {
@@ -971,21 +973,46 @@ export class FormRendererComponent implements OnInit, OnChanges {
     });
 
     dsIds.forEach(dsId => {
-      this.http.get<any>(`${this.apiBase}/api/datasources/${dsId}/items`).subscribe({
-        next: res => {
-          const rows = res.data || res || [];
-          const items = (Array.isArray(rows) ? rows : []).map((r: any) => ({
-            value: String(r.value ?? r.Value ?? ''),
-            label: String(r.label ?? r.Label ?? r.text ?? r.Text ?? '')
+      this.api.getDataSourceItems(dsId).subscribe({
+        next: items => {
+          const mapped = items.map(r => ({
+            value: String(r.value ?? ''),
+            label: String(r.label ?? r.value ?? '')
           }));
-          if (items.length > 0) {
-            this.dbSourceItems.set(dsId, items);
+          if (mapped.length > 0) {
+            this.dbSourceItems.set(dsId, mapped);
+            // Re-patch if we're in edit/view so dropdowns select correctly after async load
+            if ((this.mode === 'edit' || this.mode === 'view') && this.currentRecord) {
+              const raw = (this.currentRecord as any)._parsed
+                ?? JSON.parse((this.currentRecord as any).recordData || '{}');
+              this.dynamicForm.patchValue(this.coerceValuesForForm(this.mapExternalToFormFields(raw)));
+              if (this.mode === 'view') this.dynamicForm.disable();
+            }
             this.cdr.detectChanges();
           }
         },
         error: () => {}
       });
     });
+  }
+
+  /**
+   * Remap external record keys (SQL Server column names, any casing) to the
+   * form control fieldNames using case-insensitive matching so that patchValue
+   * can find every control regardless of casing differences between the DB
+   * schema and the fieldName the user assigned in the form designer.
+   */
+  private mapExternalToFormFields(raw: Record<string, any>): Record<string, any> {
+    const fieldNames = (this.form?.controls || []).map(c => c.fieldName).filter(Boolean);
+    const lcToField = new Map<string, string>();
+    fieldNames.forEach(f => lcToField.set(f.toLowerCase(), f));
+
+    const result: Record<string, any> = {};
+    Object.keys(raw).forEach(key => {
+      const matched = lcToField.get(key.toLowerCase());
+      if (matched !== undefined) result[matched] = raw[key];
+    });
+    return result;
   }
 
   /**
@@ -1005,7 +1032,8 @@ export class FormRendererComponent implements OnInit, OnChanges {
       if (val === undefined || val === null) return;
 
       if (selectTypes.has(ctrl.controlTypeName)) {
-        const items = ctrl.dataSourceItems || [];
+        // Use getSourceItems so runtime-fetched API/Database items are included
+        const items = this.getSourceItems(ctrl);
 
         if (ctrl.controlTypeName === 'MultiSelect' && Array.isArray(val)) {
           result[ctrl.fieldName] = val.map((v: any) => this.matchOptionValue(v, items));
