@@ -5,6 +5,9 @@ import { CommonModule, DatePipe } from '@angular/common';
 import { FormsModule } from '@angular/forms';
 import { HttpClient } from '@angular/common/http';
 import { environment } from '../../environments/environment';
+import { AiService } from '../services/ai.service';
+import { AiReportQuerySuggestion } from '../models/form-builder.models';
+import { AiReportQuerySuggestionComponent } from './ai-report-query-suggestion.component';
 
 interface SavedConnection { id: number; name: string; serverName: string; }
 interface TableColumnInfo  { columnName: string; dataType: string; isNullable: boolean; isPrimaryKey: boolean; }
@@ -41,7 +44,7 @@ type BuilderStep = 'connection' | 'tables' | 'columns' | 'filters' | 'sort' | 'p
 @Component({
   selector: 'app-report-builder',
   standalone: true,
-  imports: [CommonModule, FormsModule, DatePipe],
+  imports: [CommonModule, FormsModule, DatePipe, AiReportQuerySuggestionComponent],
   host: { 'style': 'display:flex;flex-direction:column;flex:1;min-height:0' },
   template: `
 <div class="rb-shell">
@@ -249,6 +252,19 @@ type BuilderStep = 'connection' | 'tables' | 'columns' | 'filters' | 'sort' | 'p
         <!-- STEP 3: Columns -->
         <div class="rb-step-body" *ngIf="activeStep === 'columns'">
           <h3>Select Columns</h3>
+          <button class="rb-btn rb-btn--outline rb-btn--sm" *ngIf="queryConfig.primaryTable"
+                  (click)="showAiQueryHelper = true" style="margin-bottom:10px">
+            ✨ Describe what you want
+          </button>
+          <app-ai-report-query-suggestion
+            *ngIf="showAiQueryHelper"
+            [primaryTable]="queryConfig.primaryTable"
+            [joins]="queryConfig.joins"
+            [availableColumns]="availableColumnsForAi()"
+            (close)="showAiQueryHelper = false"
+            (error)="toast($event, true)"
+            (apply)="onApplyAiQuery($event)">
+          </app-ai-report-query-suggestion>
           <div class="rb-col-toolbar">
             <button class="rb-sm-btn" (click)="selectAllColumns()">Select All</button>
             <button class="rb-sm-btn" (click)="clearAllColumns()">Clear All</button>
@@ -682,10 +698,12 @@ type BuilderStep = 'connection' | 'tables' | 'columns' | 'filters' | 'sort' | 'p
 export class ReportBuilderComponent implements OnInit {
   private http = inject(HttpClient);
   private api  = environment.apiBase;
+  private ai   = inject(AiService);
 
   view: 'list' | 'builder' = 'list';
   loading = false;
   saving  = false;
+  showAiQueryHelper = false;
 
   reports: Report[] = [];
   connections: SavedConnection[] = [];
@@ -988,6 +1006,41 @@ export class ReportBuilderComponent implements OnInit {
   }
 
   clearAllColumns() { this.queryConfig.columns.forEach(c => c.selected = false); }
+
+  // ==================== AI: NL → report query ====================
+
+  availableColumnsForAi(): Record<string, string[]> {
+    const tables = [this.queryConfig.primaryTable, ...this.queryConfig.joins.map(j => j.table)].filter(Boolean);
+    const result: Record<string, string[]> = {};
+    tables.forEach(t => {
+      result[t] = (this.tableColumns[t] || []).map(c => c.columnName);
+    });
+    return result;
+  }
+
+  onApplyAiQuery(suggestion: AiReportQuerySuggestion): void {
+    this.showAiQueryHelper = false;
+
+    suggestion.columns.forEach(sc => {
+      const existing = this.queryConfig.columns.find(c => c.table === sc.table && c.column === sc.column);
+      if (existing) {
+        existing.selected = true;
+        existing.alias = sc.alias || existing.alias;
+        existing.aggregation = sc.aggregation || existing.aggregation;
+      } else {
+        this.queryConfig.columns.push({
+          table: sc.table, column: sc.column, alias: sc.alias, aggregation: sc.aggregation, selected: true
+        });
+      }
+    });
+
+    this.queryConfig.filters = [...this.queryConfig.filters, ...suggestion.filters];
+    this.queryConfig.groupBy = [...new Set([...this.queryConfig.groupBy, ...suggestion.groupBy])];
+    this.queryConfig.orderBy = [...this.queryConfig.orderBy, ...suggestion.orderBy];
+    if (suggestion.topN) this.queryConfig.topN = suggestion.topN;
+
+    this.toast('Applied AI suggestions — review before running');
+  }
 
   get selectedColumnCount(): number {
     return this.queryConfig.columns.filter(c => c.selected !== false).length;

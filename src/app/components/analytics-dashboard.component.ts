@@ -7,6 +7,8 @@ import { CommonModule, DatePipe } from '@angular/common';
 import { FormsModule } from '@angular/forms';
 import { HttpClient } from '@angular/common/http';
 import { environment } from '../../environments/environment';
+import { AiService } from '../services/ai.service';
+import { AiDashboardSummaryComponent } from './ai-dashboard-summary.component';
 
 interface Dashboard {
   id: number;
@@ -53,7 +55,7 @@ interface ColumnFilterDto {
 @Component({
   selector: 'app-analytics-dashboard',
   standalone: true,
-  imports: [CommonModule, FormsModule, DatePipe],
+  imports: [CommonModule, FormsModule, DatePipe, AiDashboardSummaryComponent],
   template: `
 <div class="ad-shell">
 
@@ -132,10 +134,20 @@ interface ColumnFilterDto {
         </button>
         <button class="ad-btn ad-btn--outline ad-btn--sm"
           (click)="exportPDF()">↓ PDF</button>
+        <button class="ad-btn ad-btn--outline ad-btn--sm" *ngIf="widgets.length > 0"
+          (click)="showAiSummary = true">✨ Summarize</button>
         <button class="ad-btn ad-btn--primary ad-btn--sm"
           (click)="openAddWidget()">+ Widget</button>
       </div>
     </div>
+
+    <app-ai-dashboard-summary
+      *ngIf="showAiSummary"
+      [dashboardName]="activeDashboard.name"
+      [widgets]="widgetsForAiSummary()"
+      (close)="showAiSummary = false"
+      (error)="toast($event, true)">
+    </app-ai-dashboard-summary>
 
     <!-- Column filter panel -->
     <div class="ad-filter-panel" *ngIf="showFilterPanel">
@@ -982,6 +994,8 @@ interface ColumnFilterDto {
 export class AnalyticsDashboardComponent implements OnInit, OnDestroy {
   private http = inject(HttpClient);
   private cdr  = inject(ChangeDetectorRef);
+  private ai   = inject(AiService);
+  showAiSummary = false;
   private api  = environment.apiBase;
 
   // Lists
@@ -1382,6 +1396,20 @@ export class AnalyticsDashboardComponent implements OnInit, OnDestroy {
   applyFilters() { this.refreshAllWidgets(); this.showFilterPanel = false; }
   clearFilters() { this.activeFilters = []; this.refreshAllWidgets(); }
   clearDates()   { this.dateFrom = this.dateTo = ''; this.refreshAllWidgets(); }
+
+  // ==================== AI: dashboard summary ====================
+
+  widgetsForAiSummary(): { title: string; widgetType: string; data: any }[] {
+    return this.widgets
+      .filter(w => !!w.data && !w.loading && !w.error)
+      .map(w => ({
+        title: w.title,
+        widgetType: w.widgetType,
+        data: w.widgetType === 'Table'
+          ? { rowCount: w.data?.rows?.length ?? 0, sampleRows: (w.data?.rows || []).slice(0, 10) }
+          : w.data
+      }));
+  }
 
   // ---- Dashboard CRUD ----
   openCreateDashboard() {
