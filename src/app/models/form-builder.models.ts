@@ -246,3 +246,122 @@ export const FONT_WEIGHTS = ['100', '200', '300', '400', '500', '600', '700', '8
   'normal', 'bold', 'lighter', 'bolder'];
 
 export const COL_SPAN_OPTIONS = [1,2,3,4,5,6,7,8,9,10,11,12];
+
+// ─────────────────────────────────────────────────────────────
+// AI features
+// ─────────────────────────────────────────────────────────────
+
+// ---- AI Form Generator ----
+
+export interface AiControlDraft {
+  controlTypeName: string;          // must match an existing ControlType.name
+  fieldName: string;
+  label: string;
+  placeholder?: string;
+  helperText?: string;
+  isRequired: boolean;
+  colSpan: number;                  // one of COL_SPAN_OPTIONS
+  rowIndex: number;
+  sortOrder: number;
+  dataSourceItems?: { value: string; label: string }[]; // for dropdown/select/radio drafts
+  validationRuleNames?: string[];   // matched against ValidationRule.name server-side
+}
+
+export interface AiFormDraft {
+  name: string;
+  title?: string;
+  description?: string;
+  controls: AiControlDraft[];
+  warnings?: string[];
+}
+
+export interface AiGenerateFormRequest {
+  prompt: string;
+}
+
+// ---- Layout suggestions ----
+
+export interface AiLayoutSuggestion {
+  fieldName: string;      // matches FormControl.fieldName — used to re-merge
+  rowIndex: number;
+  colIndex: number;
+  colSpan: number;
+  sortOrder: number;
+  reason?: string;
+}
+
+export interface AiLayoutSuggestionResult {
+  suggestions: AiLayoutSuggestion[];
+  summary?: string;
+}
+
+// ---- Validation suggestions ----
+
+export interface AiValidationSuggestion {
+  isRequired: boolean;
+  minLength?: number;
+  maxLength?: number;
+  minValue?: string;
+  maxValue?: string;
+  pattern?: string;
+  validationRuleNames: string[];
+  reason?: string;
+  warnings?: string[];
+}
+
+// ---- Report Builder: NL → query suggestion ----
+
+export interface AiReportColumnSuggestion {
+  table: string;
+  column: string;
+  alias: string;
+  aggregation: string;
+}
+
+export interface AiReportFilterSuggestion {
+  table: string;
+  column: string;
+  operator: string;
+  value: string;
+}
+
+export interface AiReportOrderBySuggestion {
+  table: string;
+  column: string;
+  direction: string;
+}
+
+export interface AiReportQuerySuggestion {
+  columns: AiReportColumnSuggestion[];
+  filters: AiReportFilterSuggestion[];
+  groupBy: string[];
+  orderBy: AiReportOrderBySuggestion[];
+  topN: number;
+  reason?: string;
+  warnings?: string[];
+}
+
+// ---- Analytics: dashboard summary ----
+
+export interface AiDashboardSummary {
+  summary: string;
+  insights: string[];
+  warnings?: string[];
+}
+
+// ---- Cross-cutting AI assistant ----
+
+export interface AiAssistantHistoryItem {
+  role: 'user' | 'assistant';
+  content: string;
+}
+
+export interface AiAssistantAction {
+  type: string;
+  params: Record<string, any>;
+}
+
+export interface AiAssistantResponse {
+  reply: string;
+  action?: AiAssistantAction;
+}

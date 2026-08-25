@@ -61,6 +61,7 @@
                         <input type="text" placeholder="Search forms..." [(ngModel)]="searchTerm"
                                (input)="onSearch()" class="search-input" />
                     </div>
+                    <button class="btn-outline" (click)="showAiGenerator = true">✨ Generate with AI</button>
                     <button class="btn-primary" (click)="openCreateForm()">+ New Form</button>
                 </div>
             </div>
@@ -120,6 +121,8 @@
                     <button [class.tab-active]="designerTab==='connector'" (click)="designerTab='connector'" class="tab-connector">⊡ Connector</button>
                 </div>
                 <div class="designer-bar__actions">
+                    <button class="btn-outline" *ngIf="designerTab === 'design'" [disabled]="!currentForm.controls.length"
+                            (click)="showLayoutSuggestions = true">✨ Optimize Layout</button>
                     <button class="btn-outline" *ngIf="designerTab !== 'records'" (click)="designerTab='preview'">Preview</button>
                     <button class="btn-primary" *ngIf="designerTab !== 'records'" (click)="saveForm()">💾 Save</button>
                 </div>
@@ -355,6 +358,8 @@
 
                     <!-- VALIDATE TAB -->
                     <div class="props-content" *ngIf="propsTab==='validate'">
+                        <button class="btn-outline" style="margin-bottom:12px;width:100%"
+                                (click)="showValidationSuggestions = true">✨ Suggest validation</button>
                         <div class="toggle-row">
                             <label>Required</label>
                             <label class="toggle">
@@ -711,5 +716,38 @@
     <div class="toast" [class.show]="toastVisible" [class.error]="toastType==='error'">
         {{ toastMessage }}
     </div>
+
+    <!-- ====== AI: Form Generator ====== -->
+    <app-ai-form-generator
+        *ngIf="showAiGenerator"
+        (close)="showAiGenerator = false"
+        (error)="showToast($event, 'error')"
+        (formGenerated)="onAiFormGenerated($event)">
+    </app-ai-form-generator>
+
+    <!-- ====== AI: Layout Suggestions ====== -->
+    <app-ai-layout-suggestions
+        *ngIf="showLayoutSuggestions"
+        [controls]="currentForm.controls"
+        (close)="showLayoutSuggestions = false"
+        (error)="showToast($event, 'error')"
+        (apply)="onApplyLayoutSuggestions($event)">
+    </app-ai-layout-suggestions>
+
+    <!-- ====== AI: Validation Suggestions ====== -->
+    <app-ai-validation-suggestions
+        *ngIf="showValidationSuggestions && selectedControl"
+        [control]="selectedControl"
+        [validationRules]="validationRules"
+        (close)="showValidationSuggestions = false"
+        (error)="showToast($event, 'error')"
+        (apply)="onApplyValidationSuggestions($event)">
+    </app-ai-validation-suggestions>
+
+    <!-- ====== AI: Cross-cutting Assistant (always mounted) ====== -->
+    <app-ai-assistant-panel
+        (action)="onAssistantAction($event)"
+        (error)="showToast($event, 'error')">
+    </app-ai-assistant-panel>
 
 </div>

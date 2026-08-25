@@ -7,7 +7,8 @@ import { ApiService } from './services/api.service';
 import {
   ControlType, DataSource, DataType, ValidationRule,
   FormDefinition, FormSummary, FormControl,
-  FONT_FAMILIES, COL_SPAN_OPTIONS
+  FONT_FAMILIES, COL_SPAN_OPTIONS,
+  AiFormDraft, AiControlDraft, AiLayoutSuggestion, AiAssistantAction
 } from './models/form-builder.models';
 import { ControlPreviewComponent }    from './components/control-preview.component';
 import { DataSourceEditorComponent }  from './components/data-source-editor.component';
@@ -18,6 +19,12 @@ import { AnalyticsDashboardComponent } from './components/analytics-dashboard.co
 import { ReportBuilderComponent } from './components/report-builder.component';
 import { SpReportComponent } from './components/sp-report.component';
 import { ApiManagerComponent } from './components/api-manager.component';
+import { AiFormGeneratorComponent } from './components/ai-form-generator.component';
+import { AiLayoutSuggestionsComponent } from './components/ai-layout-suggestions.component';
+import { AiValidationSuggestionsComponent, ApplyValidationEvent } from './components/ai-validation-suggestions.component';
+import { AiAssistantPanelComponent } from './components/ai-assistant-panel.component';
+import { forkJoin, of } from 'rxjs';
+import { map } from 'rxjs/operators';
 
 type AppView = 'forms' | 'datasources' | 'controltypes' | 'connections' | 'analytics' | 'reports' | 'sp-reports' | 'api-manager';
 type DesignerTab = 'design' | 'settings' | 'preview' | 'json' | 'records' | 'connector';
@@ -28,7 +35,8 @@ type PropsTab = 'general' | 'style' | 'validate' | 'layout';
   standalone: true,
   imports: [
       CommonModule, FormsModule, HttpClientModule, DatePipe, ConnectionManagerComponent,
-      ControlPreviewComponent, DataSourceEditorComponent, ReportBuilderComponent, FormRendererComponent, ConnectorSettingsComponent, AnalyticsDashboardComponent, SpReportComponent, ApiManagerComponent
+      ControlPreviewComponent, DataSourceEditorComponent, ReportBuilderComponent, FormRendererComponent, ConnectorSettingsComponent, AnalyticsDashboardComponent, SpReportComponent, ApiManagerComponent,
+      AiFormGeneratorComponent, AiLayoutSuggestionsComponent, AiValidationSuggestionsComponent, AiAssistantPanelComponent
   ],
   templateUrl: './app.component.html',
   styleUrls: ['./app.component.scss'],
@@ -88,6 +96,11 @@ export class AppComponent implements OnInit {
   toastVisible = false;
   toastMessage = '';
   toastType: 'success' | 'error' = 'success';
+
+  // AI features
+  showAiGenerator = false;
+  showLayoutSuggestions = false;
+  showValidationSuggestions = false;
 
   // Constants
   fontFamilies = FONT_FAMILIES;
@@ -464,4 +477,202 @@ export class AppComponent implements OnInit {
         this.showToast('Connector saved! Records tab now uses the external table.');
         this.designerTab = 'connector';
     }
+
+  // ==================== AI: Form Generator (+ DataSource wiring) ====================
+
+  onAiFormGenerated(draft: AiFormDraft): void {
+    this.showAiGenerator = false;
+    this.loading = true;
+
+    const controlsNeedingDataSource = draft.controls.filter(
+      c => c.dataSourceItems && c.dataSourceItems.length > 0
+    );
+
+    const dataSourceCreation$ = controlsNeedingDataSource.length
+      ? forkJoin(
+          controlsNeedingDataSource.map(c =>
+            this.api.createDataSource({
+              name: `${draft.name} — ${c.label || c.fieldName}`,
+              description: `Auto-created by AI form generator for field "${c.fieldName}"`,
+              sourceType: 'Static',
+              valueField: 'value',
+              labelField: 'label',
+              isActive: true,
+              items: c.dataSourceItems!.map((it, idx) => ({
+                value: it.value,
+                label: it.label,
+                sortOrder: idx,
+                isDefault: idx === 0,
+                isActive: true
+              }))
+            } as Partial<DataSource>).pipe(
+              map(ds => ({ fieldName: c.fieldName, dataSource: ds }))
+            )
+          )
+        )
+      : of([] as { fieldName: string; dataSource: DataSource }[]);
+
+    dataSourceCreation$.subscribe({
+      next: (created) => {
+        const dsByField = new Map(created.map(x => [x.fieldName, x.dataSource]));
+
+        this.api.createForm({
+          name: draft.name,
+          title: draft.title,
+          description: draft.description,
+          submitMethod: 'POST',
+          isActive: true
+        }).subscribe({
+          next: (form) => {
+            const controls = draft.controls.map((c, i) =>
+              this.mapAiControlToFormControl(c, i, dsByField)
+            );
+            this.api.updateFormControls(form.id, controls).subscribe({
+              next: (withControls) => {
+                this.loading = false;
+                this.loadForms();
+                this.loadDataSources();
+                this.currentForm = withControls;
+                this.designerOpen = true;
+                this.activeView = 'forms';
+                this.designerTab = 'design';
+                this.selectedControlId = undefined;
+                this.isDirty = false;
+                this.showToast('AI-generated form created — review and adjust as needed!');
+              },
+              error: () => {
+                this.loading = false;
+                this.showToast('Form created, but adding AI fields failed — opening empty form', 'error');
+                this.openDesigner(form.id);
+              }
+            });
+          },
+          error: () => {
+            this.loading = false;
+            this.showToast('Failed to create AI-generated form', 'error');
+          }
+        });
+      },
+      error: () => {
+        this.loading = false;
+        this.showToast('Failed to create data sources for AI-generated form fields', 'error');
+      }
+    });
+  }
+
+  private mapAiControlToFormControl(
+    c: AiControlDraft,
+    index: number,
+    dsByField: Map<string, DataSource>
+  ): Partial<FormControl> {
+    const ct = this.controlTypes.find(t => t.name === c.controlTypeName);
+    const ds = dsByField.get(c.fieldName);
+    return {
+      controlTypeId: ct?.id ?? this.controlTypes[0]?.id,
+      fieldName: c.fieldName,
+      label: c.label,
+      placeholder: c.placeholder,
+      helperText: c.helperText,
+      rowIndex: c.rowIndex,
+      colIndex: 0,
+      colSpan: c.colSpan,
+      rowSpan: 1,
+      sortOrder: index,
+      isRequired: c.isRequired,
+      isReadOnly: false,
+      isDisabled: false,
+      isHidden: false,
+      validations: [],
+      dataSourceId: ds?.id
+    };
+  }
+
+  // ==================== AI: Layout suggestions ====================
+
+  onApplyLayoutSuggestions(suggestions: AiLayoutSuggestion[]): void {
+    this.showLayoutSuggestions = false;
+    const byField = new Map(suggestions.map(s => [s.fieldName, s]));
+    this.currentForm.controls.forEach(c => {
+      const s = byField.get(c.fieldName);
+      if (s) {
+        c.rowIndex = s.rowIndex;
+        c.colIndex = s.colIndex;
+        c.colSpan = s.colSpan;
+        c.sortOrder = s.sortOrder;
+      }
+    });
+    this.markDirty();
+    this.showToast('Layout updated — remember to Save');
+  }
+
+  // ==================== AI: Validation suggestions ====================
+
+  onApplyValidationSuggestions(result: ApplyValidationEvent): void {
+    if (!this.selectedControl) return;
+    this.showValidationSuggestions = false;
+
+    this.selectedControl.isRequired = result.isRequired;
+    if (result.minLength !== undefined) this.selectedControl.minLength = result.minLength;
+    if (result.maxLength !== undefined) this.selectedControl.maxLength = result.maxLength;
+    if (result.minValue !== undefined) this.selectedControl.minValue = result.minValue;
+    if (result.maxValue !== undefined) this.selectedControl.maxValue = result.maxValue;
+    if (result.pattern) this.selectedControl.pattern = result.pattern;
+
+    result.ruleNames.forEach(name => {
+      const rule = this.validationRules.find(r => r.name === name);
+      if (!rule) return;
+      const exists = this.selectedControl!.validations.some(v => v.validationRuleId === rule.id);
+      if (!exists) {
+        this.selectedControl!.validations.push({
+          validationRuleId: rule.id,
+          validationRuleName: rule.displayName
+        });
+      }
+    });
+
+    this.markDirty();
+    this.showToast('Validation rules applied — remember to Save');
+  }
+
+  // ==================== AI: cross-cutting assistant ====================
+
+  onAssistantAction(action: AiAssistantAction): void {
+    switch (action.type) {
+      case 'navigate_to_view': {
+        const view = action.params?.['view'];
+        if (view) this.activeView = view;
+        break;
+      }
+      case 'open_form_by_name': {
+        const name = String(action.params?.['name'] || '').toLowerCase();
+        const match = this.forms.find(f => f.name.toLowerCase().includes(name));
+        if (match) this.openDesigner(match.id);
+        else this.showToast(`No form found matching "${action.params?.['name']}"`, 'error');
+        break;
+      }
+      case 'open_ai_form_generator': {
+        this.activeView = 'forms';
+        this.showAiGenerator = true;
+        break;
+      }
+      case 'optimize_current_form_layout': {
+        if (this.designerOpen && this.currentForm?.controls?.length) {
+          this.showLayoutSuggestions = true;
+        } else {
+          this.showToast('Open a form in the designer first', 'error');
+        }
+        break;
+      }
+      case 'create_form': {
+        const name = action.params?.['name'] || 'Untitled Form';
+        this.api.createForm({ name, submitMethod: 'POST', isActive: true }).subscribe({
+          next: (form) => { this.loadForms(); this.openDesigner(form.id); },
+          error: () => this.showToast('Failed to create form', 'error')
+        });
+        break;
+      }
+      default:
+        break;
+    }
+  }
 }
